@@ -98,57 +98,100 @@ Following is a sample script to run each of the components
 It is asumed that all the repositories are located in a parent folder ( e.g `~/ens`)
 
 ```
-# Start Hardhat Locally (terminal window 1)
-cd ./ens-deployer/env
+# Start Ganache Locally (terminal window 1)
+cd ~/ens/ens-deployer/env
 ./ganache-new.sh
 
-# Deploy Contracts from ens-app-v3
-cd ./ens-app-v3
-yarn deploy:local
-
 # Optional if you prefer to deploy via ens-deployer
-cd ./ens-deployer/contract
+cd ~/ens/ens-deployer/contract/contracts
 yarn deploy --network local
-# Update .env.local with NEXT_PUBLIC_DEPLOYMENT_ADDRESSES generated above
-# Update ens-subgraph/subraph.yaml ENSRegistry, Resolver, BaseRegistrarImplementation, EthRegistrarController, NameWrapper with NEXT_PUBLIC_DEPLOYMENT_ADDRESSES
-# Update ens-metadata-service/.env  ADDRESS_ETH_REGISTRAR, ADDRESS_NAME_WRAPPER with NEXT_PUBLIC_DEPLOYMENT_ADDRESSES
+# Updating .env.local with NEXT_PUBLIC_DEPLOYMENT_ADDRESSES generated above
 
 # Start IPFS (terminal window 2)
-cd ./ipfs
+cd ~/ens/ipfs
 ipfs daemon
 
 # Start the postgres db (terminal window 3)
-cd ./postgres
-pg_ctl -D .postgres -l logfile stop
-cd ..
-rm -rf postgres
-mkdir postgres
-cd postgres
-initdb -D .postgres
-pg_ctl -D .postgres -l logfile start
-createdb graph-node
+# ./postgres.sh runs the following commands
+# cd ~/ens/postgres
+# pg_ctl -D .postgres -l logfile stop
+# cd ..
+# rm -rf postgres
+# mkdir postgres
+# cd postgres
+# initdb -D .postgres
+# pg_ctl -D .postgres -l logfile start
+# createdb graph-node
+cd ~/ens
+./postgres.sh
 
 # Start Graph Node (terminal window 4)
-cd ./graph-node
+cd ~/ens/graph-node
 cargo run -p graph-node --release -- /
   --postgres-url postgresql://<<username>>:<<password>>@localhost:5432/graph-node /
   --ethereum-rpc mainnet:http://127.0.0.1:8545  /
  --ipfs 127.0.0.1:5001
 
 # Load ens-subgraph (terminal window 5)
-cd ./ens-subgraph
+cd ~/ens/ens-subgraph
 nvm use v14.17.0
 yarn setup
 
-# Start metadata-service
-cd ./ens-metadata-service
+# Local cloudflare worker for avatar service
+# Login in to cloudflare https://cloudflare.com
+cd ~/ens/ens-avatar-worker
+pnpm start
+
+# Local ens-metadata-service
+cd ~/ens/ens-metadata-service
 yarn dev
-# If you are not making code changes you can use
-yarn build
-yarn start
 
 # Start the Frontend (separate terminal window 6)
-cd ./ens-app-v3
+cd ~/ens/ens-app-v3
+nvm use v14.17.0
 pnpm dev
 ```
 
+## Creating a new archive file for docker
+Docker uses an archive file which stores a ganache database and deployed subgraphs.
+If you need to change the contract you are working with or the subgraph you will need to update the `archive.tar.lz4` file as follows and committ the new file.
+
+```
+# Start ens-test-env (clean dataset)
+# pnpm ens-test-env -a start -ns -nb --extra-time 11368000 -k
+node ./ens-test-env/src/index.js -a start -s -ns -nb
+
+# Deploy Smart Contracts
+cd ens-deployer/contract
+npx hardhat deploy --network local
+
+# Deploy Subggraph
+cd ens-subgraph
+yarn setup
+
+# Test it's working
+cd ens-app-v3
+pnpm buildandstart:glocal
+
+# Stop ens-test-env using <CMD>C
+# pnpm ens-test-env kill (gives error see below)
+
+# Save the Archive file
+# pnpm ens-test-env save
+node ./ens-test-env/src/index.js save
+rm -rf data
+
+# load the archive file into the data folder
+# pnpm ens-test-env load
+node ./ens-test-env/src/index.js load
+
+# Start ens-test-env (-nr to use existing data)
+# pnpm ens-test-env -a start -nr -ns -nb --extra-time 11368000
+rm -rf data
+node ./ens-test-env/src/index.js load
+node ./ens-test-env/src/index.js -a start -nr -ns -nb --extra-time 11368000
+
+# Test it's working
+cd ens-app-v3
+pnpm buildandstart:glocal
+```
